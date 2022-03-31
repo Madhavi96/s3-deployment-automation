@@ -1,0 +1,15 @@
+{
+  "TableName": "Deployments",
+  "KeySchema": [
+    { "AttributeName": "appName", "KeyType": "HASH" },
+    { "AttributeName": "componentName", "KeyType": "RANGE" }
+  ],
+  "AttributeDefinitions": [
+    { "AttributeName": "appName", "AttributeType": "S" },
+    { "AttributeName": "componentName", "AttributeType": "S" }
+  ],
+  "ProvisionedThroughput": {
+    "ReadCapacityUnits": 1,
+    "WriteCapacityUnits": 1
+  }
+}

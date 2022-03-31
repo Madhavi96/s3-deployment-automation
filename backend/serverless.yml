@@ -1,0 +1,164 @@
+service: deployment-automation-api
+
+# Use the serverless-webpack plugin to transpile ES6
+plugins:
+  - serverless-webpack
+  - serverless-dynamodb-local
+  - serverless-offline
+custom:
+  # Stage is based on what is passed in when running serverless
+  # commands. Or fallsback to what we have set in the provider section.
+  stage: ${opt:stage, self:provider.stage}
+  # Dynamodb table name
+  tableName: Deployments
+  # serverless-webpack configuration
+  # Enable auto-packing of external modules
+  webpack:
+    webpackConfig: ./webpack.config.js
+    includeModules: true
+  #DynamoDB Local config
+  dynamodb:
+  # If you only want to use DynamoDB Local in some stages, declare them here
+    stages:
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+  serverless-offline:
+    port: 15001    
+    # Uncomment only if you already have a DynamoDB running locally
+    # noStart: true
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  stage: dev
+  region: us-east-1
+  # These environment variables are made available to our functions
+  # under process.env.
+  environment:
+    tableName: ${self:custom.tableName}
+  # 'iamRoleStatements' defines the permission policy for the Lambda function.
+  # In this case Lambda functions are granted with permissions to access DynamoDB.
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:DescribeTable
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      # TODO: Restrict our IAM role permissions to the specific table for the stage
+      Resource: 
+        - '*'
+        
+
+functions:
+  # Defines an HTTP API endpoint that calls the main function in create-task.js
+  # - path: url path is /tasks
+  # - method: POST request
+  # - cors: enabled CORS (Cross-Origin Resource Sharing) for browser cross
+  #     domain api call
+  # - authorizer: authenticate using the AWS IAM role
+  create:
+    handler: handlers/create-deployment.main
+    events:
+      - http:
+          path: api/deployments
+          method: post
+          cors: true
+          # authorizer: aws_iam
+  get:
+    # Defines an HTTP API endpoint that calls the main function in get-task.js
+    # - path: url path is /tasks/{id}
+    # - method: GET request
+    handler: handlers/get-deployment.main
+    events:
+      - http:
+          path: api/deployments/{id}
+          method: get
+          cors: true
+          # authorizer: aws_iam
+  list:
+    # Defines an HTTP API endpoint that calls the main function in list-tasks.js
+    # - path: url path is /notes
+    # - method: GET request
+    handler: handlers/list-deployments.main
+    events:
+      - http:
+          path: api/deployments
+          method: get
+          cors: true
+          # authorizer: aws_iam
+  update:
+    # Defines an HTTP API endpoint that calls the main function in update-task.js
+    # - path: url path is /tasks/{id}
+    # - method: PUT request
+    handler: handlers/update-deployment.main
+    events:
+      - http:
+          path: api/deployments/{id}
+          method: put
+          cors: true
+          # authorizer: aws_iam
+  delete:
+    # Defines an HTTP API endpoint that calls the main function in delete-task.js
+    # - path: url path is /tasks/{id}
+    # - method: DELETE request
+    handler: handlers/delete-deployment.main
+    events:
+      - http:
+          path: api/deployments/{id}
+          method: delete
+          cors: true
+          # authorizer: aws_iam
+# Creation of resources with separate CloudFormation templates
+resources:
+  # TODO: Use separate Configuration yaml files for each resourc, ex : ${file(./resources/api-gateway-cors-config.yml)}
+  # DynamoDB
+  - Resources:
+      DeploymentsTable:
+        Type: 'AWS::DynamoDB::Table'
+        Properties:
+          TableName: ${self:custom.tableName}
+          AttributeDefinitions:
+            -
+              AttributeName: appName
+              AttributeType: S
+            -
+              AttributeName: componentName
+              AttributeType: S
+          KeySchema:
+            -
+              AttributeName: appName
+              KeyType: HASH
+            -
+              AttributeName: componentName
+              KeyType: RANGE
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+
+  # API Gateway CORS config
+  - Resources:
+      GatewayResponseDefault4XX:
+        Type: 'AWS::ApiGateway::GatewayResponse'
+        Properties:
+          ResponseParameters:
+            gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+          ResponseType: DEFAULT_4XX
+          RestApiId:
+            Ref: 'ApiGatewayRestApi'
+      GatewayResponseDefault5XX:
+        Type: 'AWS::ApiGateway::GatewayResponse'
+        Properties:
+          ResponseParameters:
+            gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+          ResponseType: DEFAULT_5XX
+          RestApiId:
+            Ref: 'ApiGatewayRestApi'
